@@ -489,6 +489,16 @@
   .left  { animation: fadeUp 0.7s ease 0.1s both; }
   .center{ animation: fadeUp 0.7s ease 0.2s both; }
   .right { animation: fadeUp 0.7s ease 0.3s both; }
+
+  /* LEADERBOARD PANEL */
+  .panel-lb { justify-content:flex-start; gap:10px; }
+  .lb-eyebrow { font-size:12px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); margin-bottom:2px; }
+  .lb-title-tv { font-family:'Cormorant Garamond',serif; font-size:36px; color:var(--white); font-weight:600; margin-bottom:16px; }
+  .lb-row-tv { display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid rgba(212,168,67,0.15); }
+  .lb-medal { font-size:22px; min-width:30px; }
+  .lb-name-tv { flex:1; font-size:20px; color:var(--cream-dim); font-weight:600; }
+  .lb-score-tv { font-size:20px; color:var(--gold); font-weight:700; }
+  .lb-empty { font-size:18px; color:var(--cream-faint); font-style:italic; }
 </style>
 </head>
 <body>
@@ -573,8 +583,15 @@
         </div>
 
       </div>
+        <div class="panel panel-lb" data-idx="3">
+          <div class="lb-eyebrow">🏆 Trivia Leaderboard</div>
+          <div class="lb-title-tv">Who Knows Payton?</div>
+          <div id="lbList"><div class="lb-empty">No scores yet — be the first! Scan the QR to play.</div></div>
+        </div>
+
       <div class="panel-nav" id="panelNav">
         <div class="pndot active"></div>
+        <div class="pndot"></div>
         <div class="pndot"></div>
         <div class="pndot"></div>
       </div>
@@ -610,12 +627,7 @@
       <div class="live-feed">
         <div class="feed-label"><div class="feed-pulse"></div> Live from the party</div>
         <div class="feed-scroll" id="feedScroll">
-          <div class="feed-item active" id="f0"><em>Dad:</em> "Running his own company and keeping the stuffed animals on his desk." 🎓</div>
-          <div class="feed-item" id="f1"><em>Mom:</em> "Living somewhere that makes him genuinely happy — that's all I want." 💛</div>
-          <div class="feed-item" id="f2"><em>Scan the QR code</em> to drop your own prediction for Payton's next 5 years! 📱</div>
-          <div class="feed-item" id="f3"><em>Ruby says:</em> "Woof. So proud. Also where are my treats." 🐾</div>
-          <div class="feed-item" id="f4">Have a photo of Payton? <em>Scan the QR code</em> — it shows up on screen! 📸</div>
-          <div class="feed-item" id="f5"><em>Grandma Denise, Grandma Nadine, Pops</em> — we feel you here tonight. 🌟</div>
+          <div class="feed-item active" id="feedLive" style="transition:opacity 0.3s;">Scan the QR code to drop your prediction for Payton! 📱</div>
         </div>
       </div>
     </div>
@@ -775,15 +787,82 @@ function answerTrivia(idx) {
 function resetTrivia() { renderTrivia(); }
 renderTrivia();
 
-// ── LIVE FEED ────────────────────────────────────
-let fi = 0;
-const feedItems = document.querySelectorAll('.feed-item');
-function rotateFeed() {
-  feedItems[fi].classList.remove('active');
-  fi = (fi+1) % feedItems.length;
-  feedItems[fi].classList.add('active');
+// ── TRIVIA LEADERBOARD ────────────────────────────
+async function pollLeaderboard() {
+  try {
+    const r = await fetch(
+      SUPA_URL2 + '/rest/v1/graduation_trivia_scores?property_id=eq.payton-2026&order=score.desc&limit=5',
+      { headers: { apikey: ANON2, Authorization: 'Bearer ' + ANON2 } }
+    );
+    const rows = await r.json();
+    const el = document.getElementById('lbList');
+    if (!el) return;
+    if (!rows || rows.length === 0) {
+      el.innerHTML = '<div class="lb-empty">No scores yet — be the first!</div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉','4.','5.'];
+    el.innerHTML = rows.map((r,i) => `
+      <div class="lb-row-tv">
+        <span class="lb-medal">${medals[i]||i+1}</span>
+        <span class="lb-name-tv">${r.guest_name}</span>
+        <span class="lb-score-tv">${r.score}/${r.total}</span>
+      </div>`).join('');
+  } catch(e) { console.log('lb error', e); }
 }
+pollLeaderboard();
+setInterval(pollLeaderboard, 15000);
+
+// ── LIVE FEED ─ polls Supabase predictions ────────
+const SUPA_URL2 = 'https://ykfvwqewnfnibpzytspn.supabase.co';
+const ANON2 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZnZ3cWV3bmZuaWJwenl0c3BuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4MjE2NzYsImV4cCI6MjA5MDM5NzY3Nn0.cnMztZVHDV3Hof-26aRi4NIM7wKwjzxAfoMBR3oItms';
+
+let feedQueue = [
+  '🎓 Scan the QR code → drop your own prediction for Payton!',
+  '📸 Got a photo with Payton? Scan to put it on the board!',
+  '🧠 Think you know Payton? Scan to take the trivia challenge!',
+  '🎉 From Grandma Denise, Grandma Nadine, Pops and Ruby — we feel you here tonight. 💛',
+];
+let fi2 = 0;
+
+function showFeedItem(text) {
+  const el = document.getElementById('feedLive');
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => { el.innerHTML = text; el.style.opacity = '1'; }, 300);
+}
+
+function rotateFeed() {
+  showFeedItem(feedQueue[fi2 % feedQueue.length]);
+  fi2++;
+}
+
+async function pollPredictions() {
+  try {
+    const r = await fetch(
+      SUPA_URL2 + '/rest/v1/graduation_predictions?property_id=eq.payton-2026&order=created_at.desc&limit=20',
+      { headers: { apikey: ANON2, Authorization: 'Bearer ' + ANON2 } }
+    );
+    const rows = await r.json();
+    if (rows && rows.length) {
+      const live = rows.map(p => {
+        const who = p.relationship ? '<em>' + p.relationship + '</em>' : '<em>' + p.guest_name + '</em>';
+        return who + ': “' + p.prediction + '”';
+      });
+      feedQueue = [
+        ...live,
+        '📸 Got a photo with Payton? Scan to put it on the board!',
+        '🧠 Think you know Payton? Scan to take the trivia challenge!',
+        '🎉 Grandma Denise, Grandma Nadine, Pops, Ruby — we feel you here tonight. 💛',
+      ];
+    }
+  } catch(e) { console.log('feed poll error', e); }
+}
+
+rotateFeed();
 setInterval(rotateFeed, 5000);
+setInterval(pollPredictions, 15000);
+pollPredictions();
 
 // ── FOOTER TICKER ────────────────────────────────
 const msgs = [
